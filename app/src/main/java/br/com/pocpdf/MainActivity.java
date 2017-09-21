@@ -2,9 +2,14 @@ package br.com.pocpdf;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
@@ -16,6 +21,7 @@ import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
@@ -55,6 +61,7 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webview;
     private ProgressBar progressBar;
+    private long enqueue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +70,13 @@ public class MainActivity extends AppCompatActivity {
         initView();
 
         verifyStoragePermissions(this);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        registerReceiver(new DownloadBroadcast(), new IntentFilter(
+                DownloadManager.ACTION_DOWNLOAD_COMPLETE));
     }
 
     private void initView() {
@@ -124,7 +138,6 @@ public class MainActivity extends AppCompatActivity {
     public void shareAction(View view) {
 
 
-
         progressBar.setVisibility(View.VISIBLE);
         RetrofitInterface downloadService = createService(RetrofitInterface.class, pdf_base);
         downloadService.downloadFileByUrlRx(pdf_file)
@@ -149,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
             public void call(Subscriber<? super File> subscriber) {
                 BufferedSink bufferedSink = null;
                 try {
-                    String fileName = "xpto.pdf";
+                    String fileName = pdf_file;
 
                     File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName);
 
@@ -189,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onError(Throwable e) {
                 progressBar.setVisibility(View.GONE);
-                Log.e(TAG, "Error ",e);
+                Log.e(TAG, "Error ", e);
             }
 
             @Override
@@ -216,4 +229,49 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Nenhum app disponivel", Toast.LENGTH_SHORT).show();
         }
     }
+
+    public void downloadManagerAction(View view) {
+
+        DownloadManager dm = getDownloadManager();
+        DownloadManager.Request request =
+                new DownloadManager.Request(Uri.parse(pdf_base.concat(pdf_file)));
+
+        request.setTitle(pdf_file);
+        //Set the local destination for the downloaded file to a path within the application's external files directory
+        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, pdf_file);
+
+        enqueue = dm.enqueue(request);
+    }
+
+    private DownloadManager getDownloadManager() {
+        return (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+    }
+
+
+    class DownloadBroadcast extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(action)) {
+                checkDownload(intent);
+            }
+        }
+    }
+
+    private void checkDownload(Intent intent) {
+        intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, 0);
+        DownloadManager.Query query = new DownloadManager.Query();
+        query.setFilterById(enqueue);
+        DownloadManager dm = getDownloadManager();
+
+        Cursor c = dm.query(query);
+
+        if (c.moveToFirst()) {
+            int columnIndex = c.getColumnIndex(DownloadManager.COLUMN_STATUS);
+            if (DownloadManager.STATUS_SUCCESSFUL == c.getInt(columnIndex)) {
+                Toast.makeText(this, "Download Finalizado", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
 }
+

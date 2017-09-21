@@ -31,6 +31,13 @@
     android:orientation="vertical">
 
         <Button
+                android:id="@+id/button_download_manager"
+                android:text="download manager"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:onClick="downloadManagerAction"/>
+
+        <Button
                 android:id="@+id/button_webview"
                 android:text="webview"
                 android:layout_width="match_parent"
