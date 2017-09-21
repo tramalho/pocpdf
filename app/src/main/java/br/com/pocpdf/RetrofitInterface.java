@@ -10,12 +10,6 @@ import rx.Observable;
 
 public interface RetrofitInterface {
 
-    // Regular Retrofit 2 GET request
-    @Streaming
-    @GET
-    Call<ResponseBody> downloadFileByUrl(@Url String fileUrl);
-
-
     // Retrofit 2 GET request for rxjava
     @Streaming
     @GET

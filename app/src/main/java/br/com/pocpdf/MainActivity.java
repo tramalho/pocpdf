@@ -10,12 +10,14 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.FileProvider;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,6 +36,9 @@ import rx.Subscriber;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.functions.Func1;
 import rx.schedulers.Schedulers;
+
+import static android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION;
+import static android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -144,20 +149,22 @@ public class MainActivity extends AppCompatActivity {
             public void call(Subscriber<? super File> subscriber) {
                 BufferedSink bufferedSink = null;
                 try {
-                    String fileName = "pdf.pdf";
-                    // will create file in global Music directory, can be any other directory, just don't forget to handle permissions
+                    String fileName = "xpto.pdf";
 
-                    File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getAbsoluteFile(), fileName);
+                    File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName);
 
                     bufferedSink = Okio.buffer(Okio.sink(file));
                     // you can access body of response
-                    bufferedSink.writeAll(responseBodyResponse.body().source());
+                    ResponseBody body = responseBodyResponse.body();
+                    bufferedSink.writeAll(body.source());
+                    bufferedSink.flush();
                     bufferedSink.close();
 
                     subscriber.onNext(file);
                     subscriber.onCompleted();
                 } catch (IOException e) {
                     subscriber.onError(e);
+                    Log.e(TAG, "bufferedSink.close() ", e);
                 } finally {
                     if (bufferedSink != null) {
                         try {
@@ -182,27 +189,31 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onError(Throwable e) {
                 progressBar.setVisibility(View.GONE);
-                Log.d(TAG, "Error " + e.getMessage());
+                Log.e(TAG, "Error ",e);
             }
 
             @Override
             public void onNext(File file) {
-                openPdf(file);
                 Log.d(TAG, "File downloaded to " + file.getAbsolutePath());
+                openPdf(file);
             }
         };
     }
 
     private void openPdf(File file) {
+
+        Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                BuildConfig.APPLICATION_ID + ".provider", file);
+
         Intent target = new Intent(Intent.ACTION_VIEW);
-        target.setDataAndType(Uri.fromFile(file),"application/pdf");
-        target.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
+        target.setDataAndType(uri, "application/pdf");
+        target.setFlags(FLAG_GRANT_READ_URI_PERMISSION | FLAG_GRANT_WRITE_URI_PERMISSION);
 
         Intent intent = Intent.createChooser(target, "Open File");
         try {
             startActivity(intent);
         } catch (ActivityNotFoundException e) {
-            // Instruct the user to install a PDF reader here, or something
+            Toast.makeText(this, "Nenhum app disponivel", Toast.LENGTH_SHORT).show();
         }
     }
 }

@@ -38,7 +38,7 @@
         android:onClick="webviewAction"/>
 
         <Button
-                android:text="share"
+                android:text="download and share"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:onClick="shareAction"
