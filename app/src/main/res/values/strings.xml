@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">PocPDF</string>
+    <string name="title_activity_download_manager">DownloadManagerActivity</string>
 </resources>

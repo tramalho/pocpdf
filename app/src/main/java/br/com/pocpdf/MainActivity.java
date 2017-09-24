@@ -2,18 +2,14 @@ package br.com.pocpdf;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v7.app.AppCompatActivity;
@@ -21,7 +17,6 @@ import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
@@ -45,12 +40,14 @@ import rx.schedulers.Schedulers;
 
 import static android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION;
 import static android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+import static br.com.pocpdf.Constants.GOOGLE_RENDER;
+import static br.com.pocpdf.Constants.PDF_BASE;
+import static br.com.pocpdf.Constants.PDF_FILE;
+import static br.com.pocpdf.Constants.RQ_FINISH_DOWNLOAD;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = MainActivity.class.getClass().getSimpleName();
-    private String pdf_base = "http://www.adobe.com/devnet/acrobat/pdfs/";
-    private String pdf_file = "pdf_open_parameters.pdf";
 
     // Storage Permissions
     private static final int REQUEST_EXTERNAL_STORAGE = 1;
@@ -75,8 +72,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        registerReceiver(new DownloadBroadcast(), new IntentFilter(
-                DownloadManager.ACTION_DOWNLOAD_COMPLETE));
     }
 
     private void initView() {
@@ -101,8 +96,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void webviewAction(View view) {
-        webview.loadUrl("http://drive.google.com/viewerng/viewer?embedded=true&url=" +
-                pdf_base.concat(pdf_file));
+        webview.loadUrl(GOOGLE_RENDER.concat(PDF_BASE.concat(PDF_FILE)));
     }
 
     private <T> T createService(Class<T> serviceClass, String baseUrl) {
@@ -125,7 +119,8 @@ public class MainActivity extends AppCompatActivity {
         int writePermission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
         int readPermission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE);
 
-        if (writePermission != PackageManager.PERMISSION_GRANTED || readPermission != PackageManager.PERMISSION_GRANTED) {
+        if (writePermission != PackageManager.PERMISSION_GRANTED ||
+                readPermission != PackageManager.PERMISSION_GRANTED) {
             // We don't have permission so prompt the user
             ActivityCompat.requestPermissions(
                     activity,
@@ -139,8 +134,8 @@ public class MainActivity extends AppCompatActivity {
 
 
         progressBar.setVisibility(View.VISIBLE);
-        RetrofitInterface downloadService = createService(RetrofitInterface.class, pdf_base);
-        downloadService.downloadFileByUrlRx(pdf_file)
+        RetrofitInterface downloadService = createService(RetrofitInterface.class, PDF_BASE);
+        downloadService.downloadFileByUrlRx(PDF_FILE)
                 .flatMap(processResponse())
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
@@ -162,9 +157,8 @@ public class MainActivity extends AppCompatActivity {
             public void call(Subscriber<? super File> subscriber) {
                 BufferedSink bufferedSink = null;
                 try {
-                    String fileName = pdf_file;
 
-                    File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName);
+                    File file = getFile(PDF_FILE);
 
                     bufferedSink = Okio.buffer(Okio.sink(file));
                     // you can access body of response
@@ -215,14 +209,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void openPdf(File file) {
 
-        Uri uri = FileProvider.getUriForFile(MainActivity.this,
-                BuildConfig.APPLICATION_ID + ".provider", file);
+        Uri uri = FileProvider.getUriForFile(this, BuildConfig.APPLICATION_ID + ".provider", file);
 
         Intent target = new Intent(Intent.ACTION_VIEW);
         target.setDataAndType(uri, "application/pdf");
         target.setFlags(FLAG_GRANT_READ_URI_PERMISSION | FLAG_GRANT_WRITE_URI_PERMISSION);
 
-        Intent intent = Intent.createChooser(target, "Open File");
+        Intent intent = Intent.createChooser(target, "Olá Pessoal!");
+
         try {
             startActivity(intent);
         } catch (ActivityNotFoundException e) {
@@ -231,47 +225,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void downloadManagerAction(View view) {
-
-        DownloadManager dm = getDownloadManager();
-        DownloadManager.Request request =
-                new DownloadManager.Request(Uri.parse(pdf_base.concat(pdf_file)));
-
-        request.setTitle(pdf_file);
-        //Set the local destination for the downloaded file to a path within the application's external files directory
-        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, pdf_file);
-
-        enqueue = dm.enqueue(request);
+        startActivityForResult(new Intent(this, DownloadManagerActivity.class), RQ_FINISH_DOWNLOAD);
     }
 
-    private DownloadManager getDownloadManager() {
-        return (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 
-
-    class DownloadBroadcast extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(action)) {
-                checkDownload(intent);
+        if (requestCode == RQ_FINISH_DOWNLOAD) {
+            if (resultCode == RESULT_OK) {
+                Toast.makeText(this, "Voltou", Toast.LENGTH_SHORT).show();
+                openPdf(getFile(PDF_FILE));
             }
         }
     }
 
-    private void checkDownload(Intent intent) {
-        intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, 0);
-        DownloadManager.Query query = new DownloadManager.Query();
-        query.setFilterById(enqueue);
-        DownloadManager dm = getDownloadManager();
-
-        Cursor c = dm.query(query);
-
-        if (c.moveToFirst()) {
-            int columnIndex = c.getColumnIndex(DownloadManager.COLUMN_STATUS);
-            if (DownloadManager.STATUS_SUCCESSFUL == c.getInt(columnIndex)) {
-                Toast.makeText(this, "Download Finalizado", Toast.LENGTH_SHORT).show();
-            }
-        }
+    private File getFile(String fileName) {
+        return new File(Environment
+                .getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName);
     }
 }
 
